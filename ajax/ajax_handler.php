@@ -1422,7 +1422,8 @@ switch ($ajax_action) {
         $days_to_reply = (isset($ajax_form_data['dtr'])) ? altRealEscape($ajax_form_data['dtr']) : "";
         $end_date_of_reply = (isset($ajax_form_data['ldor'])) ? altRealEscape($ajax_form_data['ldor']) : "";
         $company_id = (isset($ajax_form_data['com'])) ? altRealEscape($ajax_form_data['com']) : 0;
-        $memo_id = (isset($ajax_form_data['mid'])) ? $ajax_form_data['mid'] : 0;
+
+        $memo_id = (isset($ajax_form_data['mid'])) ? $ajax_form_data['mid'] : [];
 
         if (
             ($query_no == "") ||
@@ -1478,6 +1479,7 @@ switch ($ajax_action) {
             QUERY_DATA::CLIENT_ID => $_SESSION[CLIENT_ID],
             QUERY_DATA::USER_ID => $_SESSION[RID],
             QUERY_DATA::QUERY_NO => $query_no,
+            QUERY_DATA::MEMO_ID => 0,
             QUERY_DATA::DATE_OF_ISSUE => $date_of_issue,
             QUERY_DATA::COMPANY_ID => $company_id,
             QUERY_DATA::AUDIT_TYPE_ID => $audit_type_id,
@@ -1486,9 +1488,9 @@ switch ($ajax_action) {
         if (($total_no_of_query != "") || ($total_no_of_query != null)) {
             $cols[QUERY_DATA::TOTAL_NO_OF_QUERY] = $total_no_of_query;
         }
-        if ($memo_id != 0) {
-            $cols[QUERY_DATA::MEMO_ID] = $memo_id;
-        }
+        // if (count($memo_id)>0) {
+        //     $cols[QUERY_DATA::MEMO_ID] = $memo_id;
+        // }
         if (($days_to_reply != "") || ($days_to_reply != null)) {
             $cols[QUERY_DATA::DAYS_TO_REPLY] = $days_to_reply;
             $cols[QUERY_DATA::LAST_DATE_OF_REPLY] = $end_date_of_reply;
@@ -1499,8 +1501,49 @@ switch ($ajax_action) {
             $response['message'] = ERROR_1;
             sendRes();
         }
-        $response['message'] = "Query Inserted Successfully!";
+        $insertedQid=$save['id'];
+        $insertedMemoId=0;
+        $qmemCols=[];
+        if (count($memo_id)>0) {
+            foreach ($memo_id as $mk => $mv) {
+                $qmemCols[] = [
+                    QUERY_MEMO_IDS::CLIENT_ID=>$_SESSION[CLIENT_ID],
+                    QUERY_MEMO_IDS::COMPANY_ID=>$company_id,
+                    QUERY_MEMO_IDS::QUERY_ID=>$insertedQid,
+                    QUERY_MEMO_IDS::MEMO_ID=>$mv,
+                    QUERY_MEMO_IDS::USED_UNUSED_STATUS=>0,
+                    QUERY_MEMO_IDS::STATUS=>ACTIVE_STATUS,
+                    QUERY_MEMO_IDS::CREATED_AT=>getToday(),
+                    QUERY_MEMO_IDS::UPDATED_AT=>getToday()
+                ];
+            }
+            $saveQMemo=setMultipleData(Table::QUERY_MEMO_IDS,$qmemCols);
+            if(!$saveQMemo['res']){
+                logError("Unabled to save query memo ids, Query: ".$insertedQid.", Company: ".$company_id,$saveQMemo['error']);
+            } else {
+                // $insertedMemoId=$saveQMemo['id'];
+                // $updateQtab=updateData(Table::QUERY_DATA,[
+                //     QUERY_DATA::MEMO_ID=>$insertedMemoId
+                // ],[
+                //     QUERY_DATA::ID=>$insertedQid,
+                //     QUERY_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID]
+                // ]);
+                $updateUsedStat=updateData(Table::AUDIT_MEMO_DATA,[
+                    AUDIT_MEMO_DATA::USED_UNUSED_STATUS=>1
+                ],[
+                    AUDIT_MEMO_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID]
+                ],[
+                    AUDIT_MEMO_DATA::ID=>$memo_id
+                ]);
+                if(!$updateUsedStat['res']){
+                    logError("Unabled to update the query memo used status table after attaching memo id with query, Query: ".$insertedQid, $updateUsedStat['error']);
+                }
+            }
+        }
+        $response['message'] = "Query raised successfully!";
         $response['error'] = false;
+        $response['memo_id']=$memo_id;
+        $response['qmemCols']=$qmemCols;
         sendRes();
         break;
     case 'SAVE_COMPANY_INDUSTRY':
@@ -3671,19 +3714,35 @@ switch ($ajax_action) {
             AUDIT_MEMO_DATA::DAYS_TO_REPLY,
             AUDIT_MEMO_DATA::LAST_DATE_OF_REPLY,
             AUDIT_MEMO_DATA::MEMO_NO,
-            AUDIT_MEMO_DATA::TOTAL_NO_OF_QUERY
+            AUDIT_MEMO_DATA::TOTAL_NO_OF_QUERY,
+            AUDIT_MEMO_DATA::USED_UNUSED_STATUS,
+            AUDIT_MEMO_DATA::PRIMARY_AUDITOR_ID,
+            AUDIT_MEMO_DATA::SECONDARY_AUDITOR_ID
         ], $wh);
         if (count($getMemoData) > 0) {
             $sl = 1;
             foreach ($getMemoData as $k => $v) {
-                $checkIfMemoUsed=getData(Table::QUERY_DATA,[QUERY_DATA::MEMO_ID],[QUERY_DATA::MEMO_ID=>$v[AUDIT_MEMO_DATA::ID]]);
+                // $checkIfMemoUsed=getData(Table::AUDIT_MEMO_DATA,[AUDIT_MEMO_DATA::USED_UNUSED_STATUS],[AUDIT_MEMO_DATA::ID=>$v[AUDIT_MEMO_DATA::ID]]);
                 $used='';
-                if(count($checkIfMemoUsed)>0){
-                    $used='<span class="badge badge-info"><small>Used</small></span>';
+                // if(count($checkIfMemoUsed)>0){
+                    if($v[AUDIT_MEMO_DATA::USED_UNUSED_STATUS]==1){
+                        $used='<span class="badge alert-success"><small>Used</small></span>';
+                    }
+                // }
+                $auditor=EMPTY_VALUE;
+                if($audType==1){
+                    $getAudName=getData(Table::USERS,[USERS::NAME],[USERS::ID=>$v[AUDIT_MEMO_DATA::SECONDARY_AUDITOR_ID]]);
+                    $auditor=(count($getAudName)>0)?$getAudName[0][USERS::NAME]:$auditor;
+                } else {
+                    $getAudName=getData(Table::USERS,[USERS::NAME],[USERS::ID=>$v[AUDIT_MEMO_DATA::PRIMARY_AUDITOR_ID]]);
+                    $auditor=(count($getAudName)>0)?$getAudName[0][USERS::NAME]:$auditor;
                 }
                 $trows .= '<tr class="animated bounceInUp">
-                    <td>' . $sl . '</td>
-                    <td>' . altRealEscape($v[AUDIT_MEMO_DATA::MEMO_NO]) . '&nbsp;'.$used.'</td>
+                    <td>' . $sl . '</td>';
+                if($audType==1){
+                    $trows .= '<td>' . $auditor . '</td>';
+                }
+                $trows .= '<td>' . altRealEscape($v[AUDIT_MEMO_DATA::MEMO_NO]) . '&nbsp;'.$used.'</td>
                     <td>' . altRealEscape($v[AUDIT_MEMO_DATA::TOTAL_NO_OF_QUERY]) . '</td>
                     <td>' . getFormattedDateTime($v[AUDIT_MEMO_DATA::DATE_OF_ISSUE]) . '</td>
                     <td>' . altRealEscape($v[AUDIT_MEMO_DATA::DAYS_TO_REPLY]) . '</td>
@@ -3693,27 +3752,33 @@ switch ($ajax_action) {
             }
         } else {
             $trows = '<tr class="animated fadeInDown">
-                <td colspan="7">
+                <td colspan="'.(($audType==1)?'7':'6').'">
                     <div class="alert alert-danger" role="alert">
                         No Memos found !
                     </div>
                 </td>
             </tr>';
         }
+        $thead='
+        <tr style="text-transform: uppercase; font-size: 12px;">
+            <th>sl.</th>';
+        if($audType==1){
+            $thead .= '<th>Sec Auditor</th>';
+        }
+        $thead .='<th>memo No.</th>
+            <th>total no. of query</th>
+            <th>date of issue</th>
+            <th>days to reply</th>
+            <th>Due Reply date</th>
+        </tr>
+        ';
         $thtml = <<<HTML
 <div class="row">
 <div class="col-lg-12 col-md-12 col-sm-12">
     <div class="table-responsive">
     <table class="table table-sm table-striped table-hover text-center auditor_memo_table data-table" id="auditor_memo_table">
         <thead class="text-center table-warning">
-        <tr style="text-transform: uppercase; font-size: 12px;">
-            <th>sl.</th>
-            <th>memo No.</th>
-            <th>total no. of query</th>
-            <th>date of issue</th>
-            <th>days to reply</th>
-            <th>Due Reply date</th>
-        </tr>
+            $thead
         </thead>
         <tbody>
             $trows
@@ -5939,6 +6004,9 @@ HTML;
                 $qIds[]=$qidv[QUERY_DATA::ID];
             }
         }
+        // rip($comIds);
+        // echo "------------------------";
+        // rip($qIds);
         $getAssessmentData=getData(Table::AUDIT_ASSESSMENT_DATA,[
             AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT,
             AUDIT_ASSESSMENT_DATA::PENALTY_AMOUNT,
@@ -5947,9 +6015,9 @@ HTML;
         ],[
             AUDIT_ASSESSMENT_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID]
         ],[
-            AUDIT_ASSESSMENT_DATA::COMPANY_ID=>$comIds,
-            AUDIT_ASSESSMENT_DATA::QUERY_ID=>$qIds
+            AUDIT_ASSESSMENT_DATA::COMPANY_ID=>$comIds
         ]);
+        // rip($getAssessmentData);
         if(count($getAssessmentData)>0){
             foreach($getAssessmentData as $assdk => $assdv){
                 $taxClaimed+=$assdv[AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT];
@@ -7005,6 +7073,21 @@ HTML;
         }
         $month = ($month < 10) ? '0' . $month : $month;
         $fullHtml=$totalHtml='';
+        $assignedCompanyIds=[];
+        $getAssignedCompanies = getData(Table::COMPANY_ASSIGNED_DATA, [
+            COMPANY_ASSIGNED_DATA::COMPANY_IDS,
+            COMPANY_ASSIGNED_DATA::PRIMARY_SECONDARY,
+        ], [
+            COMPANY_ASSIGNED_DATA::AUDITOR_ID => $auditor_id,
+            COMPANY_ASSIGNED_DATA::CLIENT_ID => $_SESSION[CLIENT_ID],
+            COMPANY_ASSIGNED_DATA::STATUS => ACTIVE_STATUS
+        ]);
+        if (count($getAssignedCompanies) > 0) {
+            foreach ($getAssignedCompanies as $ack => $acv) {
+            $assignedCompanyIds[] = $acv[COMPANY_ASSIGNED_DATA::COMPANY_IDS];
+            }
+            $assignedCompanyIds = array_unique($assignedCompanyIds);
+        }
         $getCompData = getData(Table::COMPANIES, [
             COMPANIES::COMPANY_NAME,
             COMPANIES::TAX_IDENTIFICATION_NUMBER,
@@ -7020,110 +7103,112 @@ HTML;
             $sl=1;
             $greater12Months=$greater6Months=$less6Months=$durrMonth=$durrExactMon=0;
             foreach ($getCompData as $k => $v) {
-                $name = altRealEscape($v[COMPANIES::COMPANY_NAME]);
-                $name .= ($v[COMPANIES::TAX_IDENTIFICATION_NUMBER]!=null)?'[ <b>TIN: </b>'.altRealEscape($v[COMPANIES::TAX_IDENTIFICATION_NUMBER]).' ]':'';
-                $ccode = ($v[COMPANIES::CASE_CODE]!=null)?altRealEscape($v[COMPANIES::CASE_CODE]):EMPTY_VALUE;
-                $date_allocated=$date_commence=$auditsDuration=EMPTY_VALUE;
-                $auditTax=$auditPenalty=$auditHours=$auditStartYear=$auditEndYear=0;
-                $auditDur=0;
-                $getAuditAssignData=getData(Table::COMPANY_ASSIGNED_DATA,[
-                    COMPANY_ASSIGNED_DATA::AUDITOR_ID,
-                    COMPANY_ASSIGNED_DATA::PRIMARY_SECONDARY,
-                    "DATE(".COMPANY_ASSIGNED_DATA::CREATED_AT.") as auditAssignedDate",
-                    "YEAR(".COMPANY_ASSIGNED_DATA::CREATED_AT.") as auditAssignedYear",
-                    COMPANY_ASSIGNED_DATA::USER_ID
-                ],[
-                    COMPANY_ASSIGNED_DATA::COMPANY_IDS=>$v[COMPANIES::ID],
-                    COMPANY_ASSIGNED_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID],
-                    COMPANY_ASSIGNED_DATA::STATUS=>ACTIVE_STATUS
-                ]);
-                $getAuditAssessData=getData(Table::AUDIT_ASSESSMENT_DATA,[
-                    AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT,
-                    AUDIT_ASSESSMENT_DATA::PENALTY_AMOUNT
-                ],[
-                    AUDIT_ASSESSMENT_DATA::COMPANY_ID=>$v[COMPANIES::ID],
-                    AUDIT_ASSESSMENT_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID]
-                ]);
-                $getAuditHoursData=getData(Table::AUDIT_TIME_SPENT_DATA,[
-                    "SUM(".AUDIT_TIME_SPENT_DATA::TIME_IN_HRS.") as totalHrs"
-                ],[
-                    AUDIT_TIME_SPENT_DATA::COMPANY_ID=>$v[COMPANIES::ID],
-                    AUDIT_TIME_SPENT_DATA::AUDITOR_ID=>$auditor_id,
-                    "YEAR(".AUDIT_TIME_SPENT_DATA::DATE.")"=>$year,
-                    "MONTH(".AUDIT_TIME_SPENT_DATA::DATE.")"=>$month,
-                    AUDIT_TIME_SPENT_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID]
-                ]);
-                if (count($getAuditAssignData)>0) {
-                    foreach ($getAuditAssignData as $aadk => $aadv) {
-                        if ($aadv[COMPANY_ASSIGNED_DATA::PRIMARY_SECONDARY==1]) {
-                            $date_allocated = getFormattedDateTime($aadv["auditAssignedDate"]);
-                            $getDateCommData=getData(Table::AUDITS_DATA,[
-                                AUDITS_DATA::AUDIT_START_DATE,
-                                AUDITS_DATA::AUDIT_EXPECTED_COMPLETE_DATE,
-                                AUDITS_DATA::AUDIT_END_DATE,
-                                "YEAR(".AUDITS_DATA::AUDIT_EXPECTED_COMPLETE_DATE.") as auditExpComYear",
-                                "YEAR(".AUDITS_DATA::AUDIT_START_DATE.") as auditStartYear",
-                                "YEAR(".AUDITS_DATA::AUDIT_END_DATE.") as auditEndYear"
-                            ],[AUDITS_DATA::COMPANY_ID=>$v[COMPANIES::ID]]);
-                            $date_commence=(count($getDateCommData)>0)?getFormattedDateTime($getDateCommData[0][AUDITS_DATA::AUDIT_START_DATE]):$date_commence;
-                            $auditsDuration=(count($getDateCommData)>0)?$getDateCommData[0]["auditStartYear"]:$auditsDuration;
-                            $auditStartYear=(count($getDateCommData)>0)?$getDateCommData[0][AUDITS_DATA::AUDIT_START_DATE]:$auditStartYear;
-                            if ((count($getDateCommData)>0)&&($getDateCommData[0]["auditEndYear"]!=null)) {
-                                $auditsDuration.=" - ".$getDateCommData[0]["auditEndYear"];
-                                $auditEndYear=$getDateCommData[0][AUDITS_DATA::AUDIT_END_DATE];
-                            } else {
-                                if ((count($getDateCommData)>0)&&($getDateCommData[0]["auditExpComYear"]!=null)) {
-                                    $auditsDuration.=" - ".$getDateCommData[0]["auditExpComYear"];
-                                    $auditEndYear=$getDateCommData[0][AUDITS_DATA::AUDIT_EXPECTED_COMPLETE_DATE];
+                if(in_array($v[COMPANIES::ID],$assignedCompanyIds)){
+                    $name = altRealEscape($v[COMPANIES::COMPANY_NAME]);
+                    $name .= ($v[COMPANIES::TAX_IDENTIFICATION_NUMBER]!=null)?'[ <b>TIN: </b>'.altRealEscape($v[COMPANIES::TAX_IDENTIFICATION_NUMBER]).' ]':'';
+                    $ccode = ($v[COMPANIES::CASE_CODE]!=null)?altRealEscape($v[COMPANIES::CASE_CODE]):EMPTY_VALUE;
+                    $date_allocated=$date_commence=$auditsDuration=EMPTY_VALUE;
+                    $auditTax=$auditPenalty=$auditHours=$auditStartYear=$auditEndYear=0;
+                    $auditDur=0;
+                    $getAuditAssignData=getData(Table::COMPANY_ASSIGNED_DATA,[
+                        COMPANY_ASSIGNED_DATA::AUDITOR_ID,
+                        COMPANY_ASSIGNED_DATA::PRIMARY_SECONDARY,
+                        "DATE(".COMPANY_ASSIGNED_DATA::CREATED_AT.") as auditAssignedDate",
+                        "YEAR(".COMPANY_ASSIGNED_DATA::CREATED_AT.") as auditAssignedYear",
+                        COMPANY_ASSIGNED_DATA::USER_ID
+                    ],[
+                        COMPANY_ASSIGNED_DATA::COMPANY_IDS=>$v[COMPANIES::ID],
+                        COMPANY_ASSIGNED_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID],
+                        COMPANY_ASSIGNED_DATA::STATUS=>ACTIVE_STATUS
+                    ]);
+                    $getAuditAssessData=getData(Table::AUDIT_ASSESSMENT_DATA,[
+                        AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT,
+                        AUDIT_ASSESSMENT_DATA::PENALTY_AMOUNT
+                    ],[
+                        AUDIT_ASSESSMENT_DATA::COMPANY_ID=>$v[COMPANIES::ID],
+                        AUDIT_ASSESSMENT_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID]
+                    ]);
+                    $getAuditHoursData=getData(Table::AUDIT_TIME_SPENT_DATA,[
+                        "SUM(".AUDIT_TIME_SPENT_DATA::TIME_IN_HRS.") as totalHrs"
+                    ],[
+                        AUDIT_TIME_SPENT_DATA::COMPANY_ID=>$v[COMPANIES::ID],
+                        AUDIT_TIME_SPENT_DATA::AUDITOR_ID=>$auditor_id,
+                        "YEAR(".AUDIT_TIME_SPENT_DATA::DATE.")"=>$year,
+                        "MONTH(".AUDIT_TIME_SPENT_DATA::DATE.")"=>$month,
+                        AUDIT_TIME_SPENT_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID]
+                    ]);
+                    if (count($getAuditAssignData)>0) {
+                        foreach ($getAuditAssignData as $aadk => $aadv) {
+                            if ($aadv[COMPANY_ASSIGNED_DATA::PRIMARY_SECONDARY==1]) {
+                                $date_allocated = getFormattedDateTime($aadv["auditAssignedDate"]);
+                                $getDateCommData=getData(Table::AUDITS_DATA,[
+                                    AUDITS_DATA::AUDIT_START_DATE,
+                                    AUDITS_DATA::AUDIT_EXPECTED_COMPLETE_DATE,
+                                    AUDITS_DATA::AUDIT_END_DATE,
+                                    "YEAR(".AUDITS_DATA::AUDIT_EXPECTED_COMPLETE_DATE.") as auditExpComYear",
+                                    "YEAR(".AUDITS_DATA::AUDIT_START_DATE.") as auditStartYear",
+                                    "YEAR(".AUDITS_DATA::AUDIT_END_DATE.") as auditEndYear"
+                                ],[AUDITS_DATA::COMPANY_ID=>$v[COMPANIES::ID]]);
+                                $date_commence=(count($getDateCommData)>0)?getFormattedDateTime($getDateCommData[0][AUDITS_DATA::AUDIT_START_DATE]):$date_commence;
+                                $auditsDuration=(count($getDateCommData)>0)?$getDateCommData[0]["auditStartYear"]:$auditsDuration;
+                                $auditStartYear=(count($getDateCommData)>0)?$getDateCommData[0][AUDITS_DATA::AUDIT_START_DATE]:$auditStartYear;
+                                if ((count($getDateCommData)>0)&&($getDateCommData[0]["auditEndYear"]!=null)) {
+                                    $auditsDuration.=" - ".$getDateCommData[0]["auditEndYear"];
+                                    $auditEndYear=$getDateCommData[0][AUDITS_DATA::AUDIT_END_DATE];
+                                } else {
+                                    if ((count($getDateCommData)>0)&&($getDateCommData[0]["auditExpComYear"]!=null)) {
+                                        $auditsDuration.=" - ".$getDateCommData[0]["auditExpComYear"];
+                                        $auditEndYear=$getDateCommData[0][AUDITS_DATA::AUDIT_EXPECTED_COMPLETE_DATE];
+                                    }
                                 }
+                                if ($auditStartYear!=0 && $auditEndYear!=0) {
+                                    // $auditDur=($auditEndYear-$auditStartYear);
+                                    $auditDur=getDateDiff($auditStartYear,$auditEndYear);
+                                    $durrMonth=getMonthsDifference($auditStartYear,$auditEndYear);
+                                    $durrExactMonArr[$v[COMPANIES::COMPANY_NAME]]=$durrMonth;
+                                    // if ($durrMonth!=0) {
+                                    //     if ($durrMonth>12) {
+                                    //         $greater12Months++;
+                                    //     }
+                                    //     if ($durrMonth<6) {
+                                    //         $less6Months++;
+                                    //     }
+                                    //     if (($durrMonth<12)&&($durrMonth>6)) {
+                                    //         $greater6Months++;
+                                    //     }
+                                    // }
+                                    // $auditDur=($auditDur<=0)?1:$auditDur;
+                                }
+                                // $auditsDuration=(count($getDateCommData)>0)?$getDateCommData[0]["auditStartYear"]." - ".$getDateCommData[0]["auditExpComYear"]:$auditsDuration;
                             }
-                            if ($auditStartYear!=0 && $auditEndYear!=0) {
-                                // $auditDur=($auditEndYear-$auditStartYear);
-                                $auditDur=getDateDiff($auditStartYear,$auditEndYear);
-                                $durrMonth=getMonthsDifference($auditStartYear,$auditEndYear);
-                                $durrExactMonArr[$v[COMPANIES::COMPANY_NAME]]=$durrMonth;
-                                // if ($durrMonth!=0) {
-                                //     if ($durrMonth>12) {
-                                //         $greater12Months++;
-                                //     }
-                                //     if ($durrMonth<6) {
-                                //         $less6Months++;
-                                //     }
-                                //     if (($durrMonth<12)&&($durrMonth>6)) {
-                                //         $greater6Months++;
-                                //     }
-                                // }
-                                // $auditDur=($auditDur<=0)?1:$auditDur;
-                            }
-                            // $auditsDuration=(count($getDateCommData)>0)?$getDateCommData[0]["auditStartYear"]." - ".$getDateCommData[0]["auditExpComYear"]:$auditsDuration;
                         }
+                    } 
+                    // else {
+                    //     $greater12Months=$greater6Months=$less6Months=0;
+                    // }
+                    if (count($getAuditAssessData)>0) {
+                        $auditTax = ($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT]!=0)?moneyFormatIndia($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT]):$auditTax;
+                        $auditPenalty = ($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::PENALTY_AMOUNT]!=0)?moneyFormatIndia($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::PENALTY_AMOUNT]):$auditPenalty;
                     }
-                } 
-                // else {
-                //     $greater12Months=$greater6Months=$less6Months=0;
-                // }
-                if (count($getAuditAssessData)>0) {
-                    $auditTax = ($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT]!=0)?moneyFormatIndia($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT]):$auditTax;
-                    $auditPenalty = ($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::PENALTY_AMOUNT]!=0)?moneyFormatIndia($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::PENALTY_AMOUNT]):$auditPenalty;
+                    $auditHours=0;
+                    if (count($getAuditHoursData)>0) {
+                        $auditHours=$getAuditHoursData[0]["totalHrs"];
+                    }
+                    $fullHtml.='
+                    <tr>
+                        <td>'.$sl.'</td>
+                        <td>'.$name.'</td>
+                        <td>'.$ccode.'</td>
+                        <td>'.$date_allocated.'</td>
+                        <td>'.$date_commence.'</td>
+                        <td>'.$auditsDuration.' ('.$auditDur.')</td>
+                        <td>'.$auditHours.'</td>
+                        <td>'.$auditTax.'</td>
+                        <td>'.$auditPenalty.'</td>
+                    </tr>
+                    ';
+                    $sl++;
                 }
-                $auditHours=0;
-                if (count($getAuditHoursData)>0) {
-                    $auditHours=$getAuditHoursData[0]["totalHrs"];
-                }
-                $fullHtml.='
-                <tr>
-                    <td>'.$sl.'</td>
-                    <td>'.$name.'</td>
-                    <td>'.$ccode.'</td>
-                    <td>'.$date_allocated.'</td>
-                    <td>'.$date_commence.'</td>
-                    <td>'.$auditsDuration.' ('.$auditDur.')</td>
-                    <td>'.$auditHours.'</td>
-                    <td>'.$auditTax.'</td>
-                    <td>'.$auditPenalty.'</td>
-                </tr>
-                ';
-                $sl++;
             }
             foreach ($durrExactMonArr as $dmk => $dmv) {
                 // if ($dmv!=0) {
@@ -7942,6 +8027,21 @@ HTML;
         }
         $month = ($month < 10) ? '0' . $month : $month;
         $fullHtml=$totalHtml=$summeryHours='';
+        $assignedCompanyIds=[];
+        $getAssignedCompanies = getData(Table::COMPANY_ASSIGNED_DATA, [
+            COMPANY_ASSIGNED_DATA::COMPANY_IDS,
+            COMPANY_ASSIGNED_DATA::PRIMARY_SECONDARY,
+        ], [
+            COMPANY_ASSIGNED_DATA::AUDITOR_ID => $auditor_id,
+            COMPANY_ASSIGNED_DATA::CLIENT_ID => $_SESSION[CLIENT_ID],
+            COMPANY_ASSIGNED_DATA::STATUS => ACTIVE_STATUS
+        ]);
+        if (count($getAssignedCompanies) > 0) {
+            foreach ($getAssignedCompanies as $ack => $acv) {
+            $assignedCompanyIds[] = $acv[COMPANY_ASSIGNED_DATA::COMPANY_IDS];
+            }
+            $assignedCompanyIds = array_unique($assignedCompanyIds);
+        }
         $getCompData = getData(Table::COMPANIES, [
             COMPANIES::COMPANY_NAME,
             COMPANIES::TAX_IDENTIFICATION_NUMBER,
@@ -7958,139 +8058,141 @@ HTML;
             $greater12Months=$greater6Months=$less6Months=$durrMonth=$durrExactMon=0;
             $totalTimeHrs=$totalOmittedAmt=$totalTaxAmt=$totalPenaltyAmt=$totalTaxPenalty=[];
             foreach ($getCompData as $k => $v) {
-                $name = altRealEscape($v[COMPANIES::COMPANY_NAME]);
-                $name .= ($v[COMPANIES::TAX_IDENTIFICATION_NUMBER]!=null)?' <br><small>[ <b>TIN: </b>'.altRealEscape($v[COMPANIES::TAX_IDENTIFICATION_NUMBER]).' ]</small>':'';
-                $ccode = ($v[COMPANIES::CASE_CODE]!=null)?altRealEscape($v[COMPANIES::CASE_CODE]):EMPTY_VALUE;
-                $date_allocated=$date_commence=$date_completed=$auditsDuration=$typeOfAssmt=EMPTY_VALUE;
-                $auditTax=$auditPenalty=$auditHours=$auditStartYear=$auditEndYear=$omittedIncome=0;
-                $auditDur=0;
-                $getAuditAssignData=getData(Table::COMPANY_ASSIGNED_DATA,[
-                    COMPANY_ASSIGNED_DATA::AUDITOR_ID,
-                    COMPANY_ASSIGNED_DATA::PRIMARY_SECONDARY,
-                    "DATE(".COMPANY_ASSIGNED_DATA::CREATED_AT.") as auditAssignedDate",
-                    "YEAR(".COMPANY_ASSIGNED_DATA::CREATED_AT.") as auditAssignedYear",
-                    COMPANY_ASSIGNED_DATA::USER_ID
-                ],[
-                    COMPANY_ASSIGNED_DATA::COMPANY_IDS=>$v[COMPANIES::ID],
-                    COMPANY_ASSIGNED_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID],
-                    COMPANY_ASSIGNED_DATA::STATUS=>ACTIVE_STATUS
-                ]);
-                $getAuditAssessData=getData(Table::AUDIT_ASSESSMENT_DATA,[
-                    AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT,
-                    AUDIT_ASSESSMENT_DATA::PENALTY_AMOUNT,
-                    AUDIT_ASSESSMENT_DATA::OMITTED_INCOME_AMOUNT,
-                    AUDIT_ASSESSMENT_DATA::ACTIVE
-                ],[
-                    AUDIT_ASSESSMENT_DATA::COMPANY_ID=>$v[COMPANIES::ID],
-                    AUDIT_ASSESSMENT_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID]
-                ]);
-                $getAuditHoursData=getData(Table::AUDIT_TIME_SPENT_DATA,[
-                    "SUM(".AUDIT_TIME_SPENT_DATA::TIME_IN_HRS.") as totalHrs"
-                ],[
-                    AUDIT_TIME_SPENT_DATA::COMPANY_ID=>$v[COMPANIES::ID],
-                    AUDIT_TIME_SPENT_DATA::AUDITOR_ID=>$auditor_id,
-                    "YEAR(".AUDIT_TIME_SPENT_DATA::DATE.")"=>$year,
-                    "MONTH(".AUDIT_TIME_SPENT_DATA::DATE.")"=>$month,
-                    AUDIT_TIME_SPENT_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID]
-                ]);
-                if (count($getAuditAssignData)>0) {
-                    foreach ($getAuditAssignData as $aadk => $aadv) {
-                        if ($aadv[COMPANY_ASSIGNED_DATA::PRIMARY_SECONDARY==1]) {
-                            $date_allocated = getFormattedDateTime($aadv["auditAssignedDate"]);
-                            $getDateCommData=getData(Table::AUDITS_DATA,[
-                                AUDITS_DATA::AUDIT_START_DATE,
-                                AUDITS_DATA::AUDIT_EXPECTED_COMPLETE_DATE,
-                                AUDITS_DATA::AUDIT_END_DATE,
-                                "YEAR(".AUDITS_DATA::AUDIT_EXPECTED_COMPLETE_DATE.") as auditExpComYear",
-                                "YEAR(".AUDITS_DATA::AUDIT_START_DATE.") as auditStartYear",
-                                "YEAR(".AUDITS_DATA::AUDIT_END_DATE.") as auditEndYear"
-                            ],[AUDITS_DATA::COMPANY_ID=>$v[COMPANIES::ID]]);
-                            $date_commence=(count($getDateCommData)>0)?getFormattedDateTime($getDateCommData[0][AUDITS_DATA::AUDIT_START_DATE]):$date_commence;
-                            $auditsDuration=(count($getDateCommData)>0)?$getDateCommData[0]["auditStartYear"]:$auditsDuration;
-                            $auditStartYear=(count($getDateCommData)>0)?$getDateCommData[0][AUDITS_DATA::AUDIT_START_DATE]:$auditStartYear;
-                            if ((count($getDateCommData)>0)&&($getDateCommData[0]["auditEndYear"]!=null)) {
-                                if ($auditsDuration==$getDateCommData[0]["auditEndYear"]) {
-                                    $auditsDuration.=" - ".($getDateCommData[0]["auditEndYear"]+1);
-                                } else {
-                                    $auditsDuration.=" - ".$getDateCommData[0]["auditEndYear"];
-                                }
-                                $auditEndYear=$getDateCommData[0][AUDITS_DATA::AUDIT_END_DATE];
-                                $date_completed=getFormattedDateTime($getDateCommData[0][AUDITS_DATA::AUDIT_END_DATE]);
-                            } else {
-                                if ((count($getDateCommData)>0)&&($getDateCommData[0]["auditExpComYear"]!=null)) {
-                                    if ($auditsDuration==$getDateCommData[0]["auditExpComYear"]) {
-                                        $auditsDuration.=" - ".($getDateCommData[0]["auditExpComYear"]+1);
+                if(in_array($v[COMPANIES::ID],$assignedCompanyIds)){
+                    $name = altRealEscape($v[COMPANIES::COMPANY_NAME]);
+                    $name .= ($v[COMPANIES::TAX_IDENTIFICATION_NUMBER]!=null)?' <br><small>[ <b>TIN: </b>'.altRealEscape($v[COMPANIES::TAX_IDENTIFICATION_NUMBER]).' ]</small>':'';
+                    $ccode = ($v[COMPANIES::CASE_CODE]!=null)?altRealEscape($v[COMPANIES::CASE_CODE]):EMPTY_VALUE;
+                    $date_allocated=$date_commence=$date_completed=$auditsDuration=$typeOfAssmt=EMPTY_VALUE;
+                    $auditTax=$auditPenalty=$auditHours=$auditStartYear=$auditEndYear=$omittedIncome=0;
+                    $auditDur=0;
+                    $getAuditAssignData=getData(Table::COMPANY_ASSIGNED_DATA,[
+                        COMPANY_ASSIGNED_DATA::AUDITOR_ID,
+                        COMPANY_ASSIGNED_DATA::PRIMARY_SECONDARY,
+                        "DATE(".COMPANY_ASSIGNED_DATA::CREATED_AT.") as auditAssignedDate",
+                        "YEAR(".COMPANY_ASSIGNED_DATA::CREATED_AT.") as auditAssignedYear",
+                        COMPANY_ASSIGNED_DATA::USER_ID
+                    ],[
+                        COMPANY_ASSIGNED_DATA::COMPANY_IDS=>$v[COMPANIES::ID],
+                        COMPANY_ASSIGNED_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID],
+                        COMPANY_ASSIGNED_DATA::STATUS=>ACTIVE_STATUS
+                    ]);
+                    $getAuditAssessData=getData(Table::AUDIT_ASSESSMENT_DATA,[
+                        AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT,
+                        AUDIT_ASSESSMENT_DATA::PENALTY_AMOUNT,
+                        AUDIT_ASSESSMENT_DATA::OMITTED_INCOME_AMOUNT,
+                        AUDIT_ASSESSMENT_DATA::ACTIVE
+                    ],[
+                        AUDIT_ASSESSMENT_DATA::COMPANY_ID=>$v[COMPANIES::ID],
+                        AUDIT_ASSESSMENT_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID]
+                    ]);
+                    $getAuditHoursData=getData(Table::AUDIT_TIME_SPENT_DATA,[
+                        "SUM(".AUDIT_TIME_SPENT_DATA::TIME_IN_HRS.") as totalHrs"
+                    ],[
+                        AUDIT_TIME_SPENT_DATA::COMPANY_ID=>$v[COMPANIES::ID],
+                        AUDIT_TIME_SPENT_DATA::AUDITOR_ID=>$auditor_id,
+                        "YEAR(".AUDIT_TIME_SPENT_DATA::DATE.")"=>$year,
+                        "MONTH(".AUDIT_TIME_SPENT_DATA::DATE.")"=>$month,
+                        AUDIT_TIME_SPENT_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID]
+                    ]);
+                    if (count($getAuditAssignData)>0) {
+                        foreach ($getAuditAssignData as $aadk => $aadv) {
+                            if ($aadv[COMPANY_ASSIGNED_DATA::PRIMARY_SECONDARY==1]) {
+                                $date_allocated = getFormattedDateTime($aadv["auditAssignedDate"]);
+                                $getDateCommData=getData(Table::AUDITS_DATA,[
+                                    AUDITS_DATA::AUDIT_START_DATE,
+                                    AUDITS_DATA::AUDIT_EXPECTED_COMPLETE_DATE,
+                                    AUDITS_DATA::AUDIT_END_DATE,
+                                    "YEAR(".AUDITS_DATA::AUDIT_EXPECTED_COMPLETE_DATE.") as auditExpComYear",
+                                    "YEAR(".AUDITS_DATA::AUDIT_START_DATE.") as auditStartYear",
+                                    "YEAR(".AUDITS_DATA::AUDIT_END_DATE.") as auditEndYear"
+                                ],[AUDITS_DATA::COMPANY_ID=>$v[COMPANIES::ID]]);
+                                $date_commence=(count($getDateCommData)>0)?getFormattedDateTime($getDateCommData[0][AUDITS_DATA::AUDIT_START_DATE]):$date_commence;
+                                $auditsDuration=(count($getDateCommData)>0)?$getDateCommData[0]["auditStartYear"]:$auditsDuration;
+                                $auditStartYear=(count($getDateCommData)>0)?$getDateCommData[0][AUDITS_DATA::AUDIT_START_DATE]:$auditStartYear;
+                                if ((count($getDateCommData)>0)&&($getDateCommData[0]["auditEndYear"]!=null)) {
+                                    if ($auditsDuration==$getDateCommData[0]["auditEndYear"]) {
+                                        $auditsDuration.=" - ".($getDateCommData[0]["auditEndYear"]+1);
                                     } else {
-                                        $auditsDuration.=" - ".$getDateCommData[0]["auditExpComYear"];
+                                        $auditsDuration.=" - ".$getDateCommData[0]["auditEndYear"];
                                     }
-                                    // $auditsDuration.=" - ".$getDateCommData[0]["auditExpComYear"];
-                                    $auditEndYear=$getDateCommData[0][AUDITS_DATA::AUDIT_EXPECTED_COMPLETE_DATE];
+                                    $auditEndYear=$getDateCommData[0][AUDITS_DATA::AUDIT_END_DATE];
+                                    $date_completed=getFormattedDateTime($getDateCommData[0][AUDITS_DATA::AUDIT_END_DATE]);
+                                } else {
+                                    if ((count($getDateCommData)>0)&&($getDateCommData[0]["auditExpComYear"]!=null)) {
+                                        if ($auditsDuration==$getDateCommData[0]["auditExpComYear"]) {
+                                            $auditsDuration.=" - ".($getDateCommData[0]["auditExpComYear"]+1);
+                                        } else {
+                                            $auditsDuration.=" - ".$getDateCommData[0]["auditExpComYear"];
+                                        }
+                                        // $auditsDuration.=" - ".$getDateCommData[0]["auditExpComYear"];
+                                        $auditEndYear=$getDateCommData[0][AUDITS_DATA::AUDIT_EXPECTED_COMPLETE_DATE];
+                                    }
                                 }
+                                if ($auditStartYear!=0 && $auditEndYear!=0) {
+                                    // $auditDur=($auditEndYear-$auditStartYear);
+                                    $auditDur=getDateDiff($auditStartYear,$auditEndYear);
+                                    $durrMonth=getMonthsDifference($auditStartYear,$auditEndYear);
+                                    $durrExactMonArr[$v[COMPANIES::COMPANY_NAME]]=$durrMonth;
+                                    // if ($durrMonth!=0) {
+                                    //     if ($durrMonth>12) {
+                                    //         $greater12Months++;
+                                    //     }
+                                    //     if ($durrMonth<6) {
+                                    //         $less6Months++;
+                                    //     }
+                                    //     if (($durrMonth<12)&&($durrMonth>6)) {
+                                    //         $greater6Months++;
+                                    //     }
+                                    // }
+                                    // $auditDur=($auditDur<=0)?1:$auditDur;
+                                }
+                                // $auditsDuration=(count($getDateCommData)>0)?$getDateCommData[0]["auditStartYear"]." - ".$getDateCommData[0]["auditExpComYear"]:$auditsDuration;
                             }
-                            if ($auditStartYear!=0 && $auditEndYear!=0) {
-                                // $auditDur=($auditEndYear-$auditStartYear);
-                                $auditDur=getDateDiff($auditStartYear,$auditEndYear);
-                                $durrMonth=getMonthsDifference($auditStartYear,$auditEndYear);
-                                $durrExactMonArr[$v[COMPANIES::COMPANY_NAME]]=$durrMonth;
-                                // if ($durrMonth!=0) {
-                                //     if ($durrMonth>12) {
-                                //         $greater12Months++;
-                                //     }
-                                //     if ($durrMonth<6) {
-                                //         $less6Months++;
-                                //     }
-                                //     if (($durrMonth<12)&&($durrMonth>6)) {
-                                //         $greater6Months++;
-                                //     }
-                                // }
-                                // $auditDur=($auditDur<=0)?1:$auditDur;
-                            }
-                            // $auditsDuration=(count($getDateCommData)>0)?$getDateCommData[0]["auditStartYear"]." - ".$getDateCommData[0]["auditExpComYear"]:$auditsDuration;
+                        }
+                    } 
+                    // else {
+                    //     $greater12Months=$greater6Months=$less6Months=0;
+                    // }
+                    if (count($getAuditAssessData)>0) {
+                        $auditTax = ($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT]!=0)?($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT]):$auditTax;
+                        $auditPenalty = ($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::PENALTY_AMOUNT]!=0)?($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::PENALTY_AMOUNT]):$auditPenalty;
+                        $omittedIncome = ($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::OMITTED_INCOME_AMOUNT]!=0)?($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::OMITTED_INCOME_AMOUNT]):$omittedIncome;
+                        
+                        $totalOmittedAmt[]=$omittedIncome;
+                        $totalTaxAmt[]=$auditTax;
+                        $totalPenaltyAmt[]=$auditPenalty;
+                        $totalTaxPenalty[]=($auditPenalty+$auditTax);
+                        if ($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::ACTIVE]==1) {
+                            $typeOfAssmt = 'Collection';
+                        } else {
+                            $typeOfAssmt = 'Objection';
                         }
                     }
-                } 
-                // else {
-                //     $greater12Months=$greater6Months=$less6Months=0;
-                // }
-                if (count($getAuditAssessData)>0) {
-                    $auditTax = ($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT]!=0)?($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::CLAIMABLE_TAX_AMOUNT]):$auditTax;
-                    $auditPenalty = ($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::PENALTY_AMOUNT]!=0)?($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::PENALTY_AMOUNT]):$auditPenalty;
-                    $omittedIncome = ($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::OMITTED_INCOME_AMOUNT]!=0)?($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::OMITTED_INCOME_AMOUNT]):$omittedIncome;
-                    
-                    $totalOmittedAmt[]=$omittedIncome;
-                    $totalTaxAmt[]=$auditTax;
-                    $totalPenaltyAmt[]=$auditPenalty;
-                    $totalTaxPenalty[]=($auditPenalty+$auditTax);
-                    if ($getAuditAssessData[0][AUDIT_ASSESSMENT_DATA::ACTIVE]==1) {
-                        $typeOfAssmt = 'Collection';
+                    if (count($getAuditHoursData)>0) {
+                        $auditHours=$getAuditHoursData[0]["totalHrs"];
+                        $totalTimeHrs[]=$auditHours;
                     } else {
-                        $typeOfAssmt = 'Objection';
+                        $auditHours=0;
                     }
+                    $fullHtml.='
+                    <tr>
+                        <td>'.$sl.'</td>
+                        <td>'.$name.'</td>
+                        <td>'.$ccode.'</td>
+                        <td>'.$date_allocated.'</td>
+                        <td>'.$date_commence.'</td>
+                        <td>'.$date_completed.'</td>
+                        <td>'.$auditHours.'</td>
+                        <td>'.$omittedIncome.'</td>
+                        <td>'.moneyFormatIndia($auditTax).'</td>
+                        <td>'.moneyFormatIndia($auditPenalty).'</td>
+                        <td>'.moneyFormatIndia($auditTax+$auditPenalty).'</td>
+                        <td>'.$auditsDuration.' <br><small>('.$auditDur.')</small></td>
+                        <td>'.$typeOfAssmt.'</td>
+                    </tr>
+                    ';
+                    $sl++;
                 }
-                if (count($getAuditHoursData)>0) {
-                    $auditHours=$getAuditHoursData[0]["totalHrs"];
-                    $totalTimeHrs[]=$auditHours;
-                } else {
-                    $auditHours=0;
-                }
-                $fullHtml.='
-                <tr>
-                    <td>'.$sl.'</td>
-                    <td>'.$name.'</td>
-                    <td>'.$ccode.'</td>
-                    <td>'.$date_allocated.'</td>
-                    <td>'.$date_commence.'</td>
-                    <td>'.$date_completed.'</td>
-                    <td>'.$auditHours.'</td>
-                    <td>'.$omittedIncome.'</td>
-                    <td>'.moneyFormatIndia($auditTax).'</td>
-                    <td>'.moneyFormatIndia($auditPenalty).'</td>
-                    <td>'.moneyFormatIndia($auditTax+$auditPenalty).'</td>
-                    <td>'.$auditsDuration.' <br><small>('.$auditDur.')</small></td>
-                    <td>'.$typeOfAssmt.'</td>
-                </tr>
-                ';
-                $sl++;
             }
             foreach ($durrExactMonArr as $dmk => $dmv) {
                 if (($dmv>12)&&($dmv!=0)) {

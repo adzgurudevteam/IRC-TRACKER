@@ -28,7 +28,8 @@ interface Table
         AUDIT_CLOSE_REQUEST_DATA = 'audit_close_request_data',
         USER_LAST_SESSION_DATA = 'user_last_session_data',
         POSITION_PAPERS = 'position_papers',
-        ASSESSMENT_QUERY_IDS = 'assessment_query_ids';
+        ASSESSMENT_QUERY_IDS = 'assessment_query_ids',
+        QUERY_MEMO_IDS = 'query_memo_ids';
 }
 interface Users
 {
@@ -401,6 +402,7 @@ interface AUDIT_MEMO_DATA
         DAYS_TO_REPLY = 'days_to_reply',
         LAST_DATE_OF_REPLY = 'last_date_of_reply',
         STATUS = 'status',
+        USED_UNUSED_STATUS = 'used_unused_status',
         CREATED_AT = 'created_at',
         UPDATED_AT = 'updated_at';
 }
@@ -577,4 +579,17 @@ interface ASSESSMENT_QUERY_IDS
         POSITION_PAPER_ID = 'position_paper_id',
         ACTIVE = 'active',
         CREATED_AT = 'created_at';
+}
+interface QUERY_MEMO_IDS
+{
+    const   
+        ID = 'id',
+        CLIENT_ID = 'client_id',
+        COMPANY_ID = 'company_id',
+        QUERY_ID = 'query_id',
+        MEMO_ID = 'memo_id',
+        USED_UNUSED_STATUS = 'used_unused_status',
+        STATUS = 'status',
+        CREATED_AT = 'created_at',
+        UPDATED_AT = 'updated_at';
 }

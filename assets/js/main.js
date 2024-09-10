@@ -2257,7 +2257,7 @@ $("#save_query_btn").on("click", () => {
 
         dtr: days_to_reply,
         com: query_section_company_select,
-        mid: ($("#query_section_memo_select").length) ? $("#query_section_memo_select").val() : 0
+        mid: ($("#query_section_memo_select").length) ? $("#query_section_memo_select").val() : []
     };
     ajaxRequest(data, (res) => {
         loader.hide();

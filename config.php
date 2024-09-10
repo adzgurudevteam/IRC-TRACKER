@@ -83,7 +83,7 @@ define('CDN_URL', HOST_URL . 'assets/');
 define('AJAX_URL', HOST_URL . "cx/");
 define('AJAX_REQUEST', 'ajax_action');
 
-define('ASSETS_VERSION', (string)'0.00523');
+define('ASSETS_VERSION', (string)'0.00524');
 
 define('FORM_HANDLER_URL', HOST_URL . "frmsbt/");
 define('FORM_UI_PATH', BASE_DIR . "forms/ui/");

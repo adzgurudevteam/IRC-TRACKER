@@ -385,6 +385,7 @@ function printContent() {
                                     ]);
                                     if (count($getIndTypeData)>0):
                                         foreach ($getIndTypeData as $cidk => $cidv):
+                                            $indtypeQsolNo=$indtypeQUnsolNo=$totNoOfQuery=$indtypeQsolPer=$indtypeQUnsolPer=0;
                                             $indTypeOptionsForTaxStat.='<a class="dropdown-item" href="javascript:void(0);" onclick="getAuditDashIndWiseTaxReport('.$cidv[COMPANY_INDUSTRY_TYPE::ID].',\''.$cidv[COMPANY_INDUSTRY_TYPE::INDUSTRY_TYPE].'\')" id="tax_collection_indType_sel_'.$cidv[COMPANY_INDUSTRY_TYPE::ID].'">'.$cidv[COMPANY_INDUSTRY_TYPE::INDUSTRY_TYPE].'</a>';
                                             if ($_SESSION[USER_TYPE]==EMPLOYEE) {
                                                 $getComIds = getData(Table::COMPANIES,[COMPANIES::ID],[
@@ -607,6 +608,8 @@ function printContent() {
                                         chart_'.$cidv[COMPANY_INDUSTRY_TYPE::ID].'.render();
                                         ';
                                         $noAudCategories[]=$cidv[COMPANY_INDUSTRY_TYPE::INDUSTRY_TYPE];
+                                        // echo $cidv[COMPANY_INDUSTRY_TYPE::INDUSTRY_TYPE].": ".$IndTotalNoAudits;
+                                        // echo '<br>';
                                         $noAudData[]=$IndTotalNoAudits;
                                         endforeach;
                                     else:

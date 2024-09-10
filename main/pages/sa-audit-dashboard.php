@@ -1,6 +1,6 @@
 <?php 
 function printContent() {
-    $total_no_of_audits=$total_audit_completed_per=$total_completed_audits=$total_pending_audits=0;
+    $total_no_of_audits=$total_audit_completed_per=$total_completed_audits=$total_pending_audits=$total_audit_not_started=0;
     $total_no_of_queries=$total_queries_submitted=$submitted_query_per=$pending_queries=0;
     $QchartScript=$noAudScript=$com_table_rows="";
     $noAudData=$noAudCategories=$showName=$assignedCompanyIds=[];
@@ -51,8 +51,13 @@ function printContent() {
             QUERY_DATA::CLIENT_ID=>$_SESSION[CLIENT_ID]
         ]);
     }
+    $csql = "SELECT COUNT(".COMPANIES::ID.") as totComs FROM ".Table::COMPANIES." WHERE ".COMPANIES::STATUS." = '".ACTIVE_STATUS."'";
+    $getTotComCnt=getCustomData($csql);
+    // echo $csql;
+    // rip($getTotComCnt);
+    $total_no_of_audits=$getTotComCnt[0]['totComs'];
     if (count($getAuditData)>0) {
-        $total_no_of_audits=count($getAuditData);
+        // $total_no_of_audits=count($getAuditData);
         foreach ($getAuditData as $adk => $adv) {
             if ($adv[AUDITS_DATA::ACTIVE] == 2) {
                 $total_completed_audits++;
@@ -62,6 +67,7 @@ function printContent() {
             }
         }
         $total_audit_completed_per=(($total_completed_audits/$total_no_of_audits)*100);
+        $total_audit_not_started=($total_no_of_audits-(count($getAuditData)));
     }
     if (count($getQueryData)>0) {
         foreach ($getQueryData as $qdk => $qdv) {
@@ -630,7 +636,7 @@ function printContent() {
                             <h4 class="small font-weight-bold">Total Audit Completed<span
                                     class="float-right"><?=floor($total_audit_completed_per)?>% (<?=$total_completed_audits?>)</span></h4>
                             <div class="progress mb-4">
-                                <div class="progress-bar bg-warning" role="progressbar" style="width: <?=floor($total_audit_completed_per)?>%"
+                                <div class="progress-bar bg-success" role="progressbar" style="width: <?=floor($total_audit_completed_per)?>%"
                                     aria-valuenow="<?=floor($total_audit_completed_per)?>" aria-valuemin="0" aria-valuemax="100"></div>
                             </div>
                             <hr />
@@ -639,6 +645,12 @@ function printContent() {
                             <div class="progress mb-4">
                                 <div class="progress-bar" role="progressbar" style="width: <?=floor(($total_pending_audits/$total_no_of_audits)*100);?>%"
                                     aria-valuenow="<?=floor(($total_pending_audits/$total_no_of_audits)*100);?>" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                            <h4 class="small font-weight-bold">Audit Not Started<span
+                                    class="float-right"><?=floor(($total_audit_not_started/$total_no_of_audits)*100).'% ('.$total_audit_not_started.')';?></span></h4>
+                            <div class="progress mb-4">
+                                <div class="progress-bar" role="progressbar" style="width: <?=floor(($total_audit_not_started/$total_no_of_audits)*100);?>%"
+                                    aria-valuenow="<?=floor(($total_audit_not_started/$total_no_of_audits)*100);?>" aria-valuemin="0" aria-valuemax="100"></div>
                             </div>
                             <hr style="border: none; height: 2px; color: #333; background-color: #333;" />
                             <h4 class="small font-weight-bold" style="font-size: 16px;">Total No. of Queries<span
@@ -654,7 +666,7 @@ function printContent() {
                             <h4 class="small font-weight-bold">No. of Queries Pending<span
                                     class="float-right"><?=floor(($pending_queries/$total_no_of_queries)*100);?>% (<?=$pending_queries?>)</span></h4>
                             <div class="progress">
-                                <div class="progress-bar bg-success" role="progressbar" style="width: <?=floor(($pending_queries/$total_no_of_queries)*100);?>%"
+                                <div class="progress-bar bg-warning" role="progressbar" style="width: <?=floor(($pending_queries/$total_no_of_queries)*100);?>%"
                                     aria-valuenow="<?=floor(($pending_queries/$total_no_of_queries)*100);?>" aria-valuemin="0" aria-valuemax="100"></div>
                             </div>
                         </div>
@@ -803,6 +815,7 @@ function printContent() {
                                     ]);
                                     if (count($getIndTypeData)>0):
                                         foreach ($getIndTypeData as $cidk => $cidv):
+                                            $indtypeQsolNo=$indtypeQUnsolNo=$totNoOfQuery=$indtypeQsolPer=$indtypeQUnsolPer=0;
                                             $indTypeOptionsForTaxStat.='<a class="dropdown-item" href="javascript:void(0);" onclick="getAuditDashIndWiseTaxReport('.$cidv[COMPANY_INDUSTRY_TYPE::ID].',\''.$cidv[COMPANY_INDUSTRY_TYPE::INDUSTRY_TYPE].'\')" id="tax_collection_indType_sel_'.$cidv[COMPANY_INDUSTRY_TYPE::ID].'">'.$cidv[COMPANY_INDUSTRY_TYPE::INDUSTRY_TYPE].'</a>';
                                             if ($_SESSION[USER_TYPE]==EMPLOYEE) {
                                                 $getComIds = getData(Table::COMPANIES,[COMPANIES::ID],[

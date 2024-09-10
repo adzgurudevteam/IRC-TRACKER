@@ -439,11 +439,25 @@ function printContent()
     </li>
   </ul>
   <div class="tab-content" id="myTabContent">
-    <!-- Audit Companies list starts -->
     <div class="tab-pane fade" id="memo" role="tabpanel" aria-labelledby="memo-tab">
       <div class="card mt-5">
         <div class="card-body">
-          <div class="row">
+          <div class="row pt-3">
+            <div class="col-lg-7 col-md-7 col-sm-7">
+              <!-- <label class="form_label">Select Company</label> -->
+              <select class="form-control select_company" id="memo_company_select">
+                <?= $active_audit_companies; ?>
+              </select>
+            </div>
+            <?php if($_SESSION[USER_TYPE]==EMPLOYEE): ?>
+            <div class="col-lg-5 col-md-5 col-sm-5 text-right memo_nav_btn">
+              <button type="button" class="btn btn-sm btn-primary" style="cursor: not-allowed !important;" id="add_memo_btn" onclick="addMemoNav();" disabled>
+                <small><i class="fas fa-plus"></i>&nbsp;Add Memo</small>
+              </button>
+            </div>
+            <?php endif; ?>
+          </div>
+          <div class="row pt-3">
             <div class="col-lg-12 col-md-12 col-sm-12">
               <?= getSpinner(true, "memo_table_loader"); ?>
               <div class="table-responsive">
@@ -474,6 +488,7 @@ function printContent()
         </div>
       </div>
     </div>
+    <!-- Audit Companies list starts -->
     <div class="tab-pane fade show active" id="audit" role="tabpanel" aria-labelledby="audit-tab">
       <div class="card mt-5">
         <div class="card-body">
