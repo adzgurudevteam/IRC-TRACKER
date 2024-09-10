@@ -1,0 +1,12 @@
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^.*$ index.php [L,QSA]
+<FilesMatch "\.(json)$">
+Redirect https://tracker.adzguruprojects.biz/404
+</FilesMatch>
+
+ErrorDocument 404 https://tracker.adzguruprojects.biz/404
+
+order allow,deny
+deny from 155.0.2.0
+allow from all

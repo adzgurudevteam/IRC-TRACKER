@@ -1,0 +1,21 @@
+{
+    "engine": "pdo",
+    "db_config": {
+        "host": "localhost",
+        "username": "adzguzzg_tax_db",
+        "password": "Yb?s~4iO{!.K",
+        "database": "adzguzzg_tax_db"
+    },
+    "default_email": "myemail@email.com",
+    "default_email_pwd": "xxxxxxxxxxx",
+    "company_name": "IRC",
+    "business_name": "Revenue and Audit Insight Tracking Enabled System (RAITES)",
+    "business_heading": "RAITES",
+    "business_sub_heading": "Revenue and Audit Insight Tracking Enabled System",
+    "company_default_logo": "logo.png",
+    "company_title_logo": "logo.png",
+    "api": false,
+    "api_url": "",
+    "app_name": "",
+    "api_key": ""
+}

@@ -1,0 +1,12 @@
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^.*$ index.php [L,QSA]
+<FilesMatch "\.(json)$">
+Redirect http://127.0.0.1/tax/404
+</FilesMatch>
+
+ErrorDocument 404 http://127.0.0.1/tax/404
+
+order allow,deny
+deny from 155.0.2.0
+allow from all
