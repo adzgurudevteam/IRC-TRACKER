@@ -45,6 +45,7 @@ function printContent()
                     $getQueryData=getData(Table::QUERY_DATA,[
                         QUERY_DATA::QUERY_REPLY_IS_SUBMITTED,
                         QUERY_DATA::ID,
+                        QUERY_DATA::QUERY_NO,
                         QUERY_DATA::QUERY_STATUS,
                         QUERY_DATA::TOTAL_NO_OF_QUERY,
                         QUERY_DATA::NO_OF_QUERY_SOLVED,
@@ -81,7 +82,7 @@ function printContent()
                                         $qop = 'admin-audits/';
                                         break;
                                 }
-                                $oc_name = '<b>'.$v[COMPANIES::COMPANY_NAME].'</b> [<span class="text-danger">Since:</span> '.getFormattedDateTime($sqdv[QUERY_DATA::LAST_DATE_OF_REPLY]).']';
+                                $oc_name = '<b>'.$v[COMPANIES::COMPANY_NAME].' (#'.$sqdv[QUERY_DATA::QUERY_NO].')</b> [<span class="text-danger">Since:</span> '.getFormattedDateTime($sqdv[QUERY_DATA::LAST_DATE_OF_REPLY]).']';
                                 $endOverDueComNames = '<a class="workspaceLink" href="'.HOST_URL.$qop.'?c='.$v[COMPANIES::ID].'#query">'.$oc_name.'</a>';
                                 if (count($qRunningOverdue)>0) {
                                     if (!in_array($endOverDueComNames,$qRunningOverdue)) {
@@ -105,7 +106,8 @@ function printContent()
                                         $qp = 'admin-audits/';
                                         break;
                                 }
-                                $endDueComNames = '<a class="workspaceLink" href="'.HOST_URL.$qp.'?c='.$v[COMPANIES::ID].'#query">'.$v[COMPANIES::COMPANY_NAME].'</a>';
+                                $endDueDateQcomNames='<b>'.$v[COMPANIES::COMPANY_NAME].' (#'.$sqdv[QUERY_DATA::QUERY_NO].')</b>';
+                                $endDueComNames = '<a class="workspaceLink" href="'.HOST_URL.$qp.'?c='.$v[COMPANIES::ID].'#query">'.$endDueDateQcomNames.'</a>';
                                 if (count($endOfDueDateComsArr)>0) {
                                     if (!in_array($endDueComNames,$endOfDueDateComsArr)) {
                                         $endOfDueDateComsArr[] = $endDueComNames;
@@ -131,7 +133,8 @@ function printContent()
                                                 $qep = 'admin-audits/';
                                                 break;
                                         }
-                                        $endExtDueComNames = '<a class="workspaceLink" href="'.HOST_URL.$qep.'?c='.$v[COMPANIES::ID].'#query">'.$v[COMPANIES::COMPANY_NAME].'</a>';
+                                        $endExtDueDateQcomNames='<b>'.$v[COMPANIES::COMPANY_NAME].' (#'.$sqdv[QUERY_DATA::QUERY_NO].')</b>';
+                                        $endExtDueComNames = '<a class="workspaceLink" href="'.HOST_URL.$qep.'?c='.$v[COMPANIES::ID].'#query">'.$endExtDueDateQcomNames.'</a>';
                                         if (count($endExtDueDate)>0) {
                                             if (!in_array($endExtDueComNames,$endExtDueDate)) {
                                                 $endExtDueDate[] = $endExtDueComNames;
@@ -164,6 +167,7 @@ function printContent()
                 foreach ($getAuditData as $ak => $av) {
                     $getNoticeData=getData(Table::COMPANY_NOTICE_DATA,[
                         COMPANY_NOTICE_DATA::ID,
+                        COMPANY_NOTICE_DATA::NOTICE_NO,
                         COMPANY_NOTICE_DATA::LAST_DATE_OF_REPLY,
                         COMPANY_NOTICE_DATA::NOTICE_STATUS
                     ],[
@@ -179,7 +183,7 @@ function printContent()
                             } else {
                                 if (($ndv[COMPANY_NOTICE_DATA::LAST_DATE_OF_REPLY]<getToday(false)) && ($ndv[COMPANY_NOTICE_DATA::NOTICE_STATUS]!=1)) {
                                     $noticeOverdueCount++;
-                                    $oc_name = '<b>'.$v[COMPANIES::COMPANY_NAME].'</b> [<span class="text-danger">Since:</span> '.getFormattedDateTime($ndv[COMPANY_NOTICE_DATA::LAST_DATE_OF_REPLY]).']';
+                                    $oc_name = '<b>'.$v[COMPANIES::COMPANY_NAME].' (#'.$ndv[COMPANY_NOTICE_DATA::NOTICE_NO].')</b> [<span class="text-danger">Since:</span> '.getFormattedDateTime($ndv[COMPANY_NOTICE_DATA::LAST_DATE_OF_REPLY]).']';
                                     $nop = '';
                                     switch ($_SESSION[USER_TYPE]) {
                                         case EMPLOYEE:
@@ -215,7 +219,8 @@ function printContent()
                                             $np = 'admin-audits/';
                                             break;
                                     }
-                                    $endDueNoticeNames = '<a class="workspaceLink" href="'.HOST_URL.$np.'?c='.$v[COMPANIES::ID].'#notice">'.$v[COMPANIES::COMPANY_NAME].'</a>';
+                                    $endDueDateNoticeNames='<b>'.$v[COMPANIES::COMPANY_NAME].' (#'.$ndv[COMPANY_NOTICE_DATA::NOTICE_NO].'</b>)';
+                                    $endDueNoticeNames = '<a class="workspaceLink" href="'.HOST_URL.$np.'?c='.$v[COMPANIES::ID].'#notice">'.$endDueDateNoticeNames.'</a>';
                                     if (count($endDueNoticeDateArr)>0) {
                                         if (!in_array($endDueNoticeNames,$endDueNoticeDateArr)) {
                                             $endDueNoticeDateArr[] = $endDueNoticeNames;
@@ -279,54 +284,78 @@ function printContent()
                                 }
                                 if ($ppdv[POSITION_PAPERS::INITIAL_SUBMISSION_DATE]<getToday(false)) {
                                     // $getQnameOverdue = getData(Table::QUERY_DATA,[QUERY_DATA::QUERY_NO],[QUERY_DATA::ID=>$ppdv[POSITION_PAPER_DATA::QUERY_ID]]);
-                                    
+                                    $positionPaperOverdueCount++;
+                                    $ppp = '';
+                                    switch ($_SESSION[USER_TYPE]) {
+                                        case EMPLOYEE:
+                                            $ppp = 'auditor-audits/';
+                                            break;
+                                        case SADMIN:
+                                            $ppp = 'sadmin-audits/';
+                                            break;
+                                        case ADMIN:
+                                            $ppp = 'admin-audits/';
+                                            break;
+                                    }
+                                    $QnameWcomOverdue = '<b>#'.$ppdv[POSITION_PAPERS::REFERENCE_NO].'</b> from: '.$v[COMPANIES::COMPANY_NAME].' [<span class="text-danger">Since:</span> '.getFormattedDateTime($ppdv[POSITION_PAPER_DATA::INITIAL_SUBMISSION_DATE]).']';
+                                    $QnameWcomOverdueNames = '<a class="workspaceLink" href="'.HOST_URL.$ppp.'?c='.$v[COMPANIES::ID].'#position-paper">'.$QnameWcomOverdue.'</a>';
                                     if ($positionExtFound) {
                                         if ($positionExtOverDue) {
                                             $positionPaperOverdueCount++;
-                                            $QnameWcomOverdue = '<b>'.$ppdv[POSITION_PAPERS::REFERENCE_NO].'</b> from: '.$v[COMPANIES::COMPANY_NAME].' [<span class="text-danger">Since:</span> '.getFormattedDateTime($getPositionExtData[0][POSITION_PAPER_EXTENTION_DATES::EXTENTION_END_DATE]).']';
                                             // $overduePositionPapersArr[]=$QnameWcomOverdue;
                                             if (count($overduePositionPapersArr)>0) {
-                                                if (!in_array($QnameWcomOverdue,$overduePositionPapersArr)) {
-                                                    $overduePositionPapersArr[] = $QnameWcomOverdue;
+                                                if (!in_array($QnameWcomOverdueNames,$overduePositionPapersArr)) {
+                                                    $overduePositionPapersArr[] = $QnameWcomOverdueNames;
                                                 }
                                             } else {
-                                                $overduePositionPapersArr[] = $QnameWcomOverdue;
+                                                $overduePositionPapersArr[] = $QnameWcomOverdueNames;
                                             }
                                         }
                                     } else {
-                                        $positionPaperOverdueCount++;
-                                        $QnameWcomOverdue = '<b>'.$ppdv[POSITION_PAPERS::REFERENCE_NO].'</b> from: '.$v[COMPANIES::COMPANY_NAME].' [<span class="text-danger">Since:</span> '.getFormattedDateTime($ppdv[POSITION_PAPER_DATA::INITIAL_SUBMISSION_DATE]).']';
                                         // $overduePositionPapersArr[]=$QnameWcomOverdue;
                                         if (count($overduePositionPapersArr)>0) {
-                                            if (!in_array($QnameWcomOverdue,$overduePositionPapersArr)) {
-                                                $overduePositionPapersArr[] = $QnameWcomOverdue;
+                                            if (!in_array($QnameWcomOverdueNames,$overduePositionPapersArr)) {
+                                                $overduePositionPapersArr[] = $QnameWcomOverdueNames;
                                             }
                                         } else {
-                                            $overduePositionPapersArr[] = $QnameWcomOverdue;
+                                            $overduePositionPapersArr[] = $QnameWcomOverdueNames;
                                         }
                                     }
                                 }
                                 if ($ppdv[POSITION_PAPER_DATA::INITIAL_SUBMISSION_DATE]==getToday(false)) {
                                     // $getQname = getData(Table::QUERY_DATA,[QUERY_DATA::QUERY_NO],[QUERY_DATA::ID=>$ppdv[POSITION_PAPER_DATA::QUERY_ID]]);
-                                    $QnameWcom = $ppdv[POSITION_PAPERS::REFERENCE_NO].' from: '.$v[COMPANIES::COMPANY_NAME];
+                                    $ppop = '';
+                                    switch ($_SESSION[USER_TYPE]) {
+                                        case EMPLOYEE:
+                                            $ppop = 'auditor-audits/';
+                                            break;
+                                        case SADMIN:
+                                            $ppop = 'sadmin-audits/';
+                                            break;
+                                        case ADMIN:
+                                            $ppop = 'admin-audits/';
+                                            break;
+                                    }
+                                    $QnameWcom = '<b>#'.$ppdv[POSITION_PAPERS::REFERENCE_NO].'</b> from: '.$v[COMPANIES::COMPANY_NAME];
+                                    $QnameWcomNames = '<a class="workspaceLink" href="'.HOST_URL.$ppop.'?c='.$v[COMPANIES::ID].'#position-paper">'.$QnameWcom.'</a>';
                                     if ($positionExtFound) {
                                         if ($getPositionExtData[0][POSITION_PAPER_EXTENTION_DATES::EXTENTION_END_DATE]==getToday(false)) {
                                             // $endPositionDueDateArr[]=$QnameWcom;
                                             if (count($endPositionExtDueDateArr)>0) {
-                                                if (!in_array($QnameWcom,$endPositionExtDueDateArr)) {
-                                                    $endPositionExtDueDateArr[] = $QnameWcom;
+                                                if (!in_array($QnameWcomNames,$endPositionExtDueDateArr)) {
+                                                    $endPositionExtDueDateArr[] = $QnameWcomNames;
                                                 }
                                             } else {
-                                                $endPositionExtDueDateArr[] = $QnameWcom;
+                                                $endPositionExtDueDateArr[] = $QnameWcomNames;
                                             }
                                         }
                                     } else {
                                         if (count($endPositionDueDateArr)>0) {
-                                            if (!in_array($QnameWcom,$endPositionDueDateArr)) {
-                                                $endPositionDueDateArr[] = $QnameWcom;
+                                            if (!in_array($QnameWcomNames,$endPositionDueDateArr)) {
+                                                $endPositionDueDateArr[] = $QnameWcomNames;
                                             }
                                         } else {
-                                            $endPositionDueDateArr[] = $QnameWcom;
+                                            $endPositionDueDateArr[] = $QnameWcomNames;
                                         }
                                     }
                                 }
